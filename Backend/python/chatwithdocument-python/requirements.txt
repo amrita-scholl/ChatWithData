@@ -1,0 +1,6 @@
+Flask 
+requests 
+pdfplumber 
+pandas 
+openpyxl 
+Pillow

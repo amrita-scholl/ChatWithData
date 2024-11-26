@@ -1,0 +1,27 @@
+/* src/styles.css */
+.App {
+    text-align: center;
+    margin-top: 50px;
+  }
+  
+  .upload-resume {
+    margin: 20px auto;
+    max-width: 400px;
+  }
+  
+  input[type="file"] {
+    display: block;
+    margin: 20px auto;
+  }
+  
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+  }
+  
+  a {
+    display: block;
+    margin-top: 10px;
+    color: blue;
+  }
+  
