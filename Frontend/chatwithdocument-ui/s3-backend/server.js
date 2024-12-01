@@ -2,10 +2,14 @@ const express = require('express');
 const multer = require('multer');
 const AWS = require('aws-sdk');
 const path = require('path');
-const cors = require('cors'); // Add this line
+const cors = require('cors');
+const axios = require('axios');  // Import axios to send the pre-signed URL to your Python API
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Middleware to parse JSON request body
+app.use(express.json()); // Add this line to parse JSON requests
 
 // Configure CORS
 app.use(cors({
@@ -13,13 +17,6 @@ app.use(cors({
 }));
 
 // Configure AWS SDK
-// AWS.config.update({
-//   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-//   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-//   signatureVersion: 'v4',
-//   region: 'ap-south-1',
-// });
-
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -44,7 +41,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
   const params = {
     Bucket: 'chat-with-document',
-    Key: file.originalname,
+    Key: fileName,  // Use the unique file name
     Body: file.buffer,
     ContentType: file.mimetype
   };
@@ -56,17 +53,27 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     // Generate a pre-signed URL
     const urlParams = {
       Bucket: 'chat-with-document',
-      Key: file.originalname,
-      Expires: 60 * 5 // URL expiration time in seconds
+      Key: fileName,  // Ensure the fileName is used to generate the URL
+      Expires: 60 * 5, // URL expiration time in seconds (5 minutes)
     };
 
     const preSignedUrl = s3.getSignedUrl('getObject', urlParams);
 
     console.log('Generated pre-signed URL:', preSignedUrl);
 
+    // Send the pre-signed URL to the Python API
+    const response = await axios.post('http://localhost:5000/process-file', {
+      url: preSignedUrl, // Send the pre-signed URL in the request body
+    });
+
+    const docId = response.data.doc_id;  // Assuming the Python API returns doc_id
+    console.log('Received doc_id:', docId);
+
+    // Send back the file URL and doc_id
     res.json({
       message: 'File uploaded successfully',
-      fileUrl: preSignedUrl
+      fileUrl: preSignedUrl,
+      doc_id: docId,  // Include doc_id in the response
     });
   } catch (error) {
     console.error(error);

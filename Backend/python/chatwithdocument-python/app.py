@@ -1,16 +1,24 @@
 import os
 import requests
+import fitz  # PyMuPDF
 from flask import Flask, request, jsonify
+from pydantic import BaseModel
 import pdfplumber
 import uuid
 import pandas as pd
 from PIL import Image
+from typing import List
 from io import BytesIO
 import logging
-from pymongo import MongoClient
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
-from transformers import AutoTokenizer, AutoModel
-import torch
+from transformers import BertTokenizer, BertModel
+from google.cloud import aiplatform
+from flask_cors import CORS
+import openai
+
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,16 +28,43 @@ load_dotenv()
 # Get the MongoDB connection string from the environment variable
 mongo_uri = os.getenv("MONGO_URI")
 # MongoDB setup
-mongo_client = MongoClient(mongo_uri)
+mongo_client = MongoClient(mongo_uri, server_api=ServerApi('1'))
 db = mongo_client["chat_document"]
 chunks_collection = db["chunks"]
 
-# Load the tokenizer and model (assuming "google/gemini-xx" is available, replace with the actual model name)
-tokenizer = AutoTokenizer.from_pretrained("google/gemini-xx")
-model = AutoModel.from_pretrained("google/gemini-xx")
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize OpenAI
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# # Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
+# google_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = google_credentials_path
+
+# PROJECT_ID = "tokyo-mark-373502"
+# LOCATION = "us-central1"
+# MODEL_NAME = "gemini-1.5-pro"  # Replace with "gemini-1.5-pro" if applicable
+
+# # Load the tokenizer and model (assuming "google/gemini-xx" is available, replace with the actual model name)
+# tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+# model = AutoModel.from_pretrained(MODEL_NAME)
+# Initialize Vertex AI
+# aiplatform.init(project=PROJECT_ID, location=LOCATION)
+
+# # Load the model
+# model = aiplatform.generation_ai.TextGenerationModel(model_name=MODEL_NAME)
+
+# Load pre-trained BERT model and tokenizer
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained('bert-base-uncased')
 
 # Initialize Flask app
 app = Flask(__name__)
+
+CORS(app)  # This will allow all domains, or you can specify allowed origins.
+
 
 @app.route('/process-file', methods=['POST'])
 def process_file():
@@ -86,8 +121,8 @@ def process_file():
                 logging.info(f"Inserted chunk {chunk_id} into MongoDB")
 
                 # Clean up temporary file
-                os.remove(local_filename)
-            return jsonify({"message": "PDF processed successfully", "text": text}), 200
+                #os.remove(local_filename)
+            return jsonify({"message": "PDF processed successfully", "doc_id": doc_id}), 200
 
         # Process Excel file
         elif url.lower().endswith('.xls') or url.lower().endswith('.xlsx'):
@@ -174,6 +209,48 @@ def get_embeddings(text: str):
     outputs = model(**inputs)
     embeddings = outputs.last_hidden_state.mean(dim=1).flatten().tolist()
     return embeddings
+
+# Function to get chunks from MongoDB by doc_id
+def get_chunks_by_doc_id(doc_id):
+    # Query MongoDB to find chunks related to the doc_id
+    chunks = chunks_collection.find({"doc_id": doc_id})  # Search for chunks by doc_id
+    texts = [chunk["text"] for chunk in chunks if "text" in chunk]
+    logger.info(f"Retrieved chunks for doc_id {doc_id}: {texts[:5]}...")  # Log a portion of the chunks for debugging
+    return texts
+
+# Function to generate response from OpenAI using doc_id
+def generate_response(doc_id, query):
+    chunks = get_chunks_by_doc_id(doc_id)  # Fetch chunks related to the document
+    if not chunks:
+        return "No content found for this document. Please check the doc_id."
+
+    context = " ".join(chunks)  # Combine all chunks as context for the response
+    combined_input = context + "\n\n" + query  # Add the user query to the context
+    
+    # Use the correct endpoint for chat models (v1/chat/completions)
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",  # Use the appropriate chat model (e.g., "gpt-3.5-turbo")
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": combined_input}
+        ],
+        max_tokens=150
+    )
+    return response['choices'][0]['message']['content'].strip()
+
+# Route to handle chat request
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = request.get_json()  # Get the JSON data from the request body
+    logger.info(data)
+    if not data or "doc_id" not in data or "query" not in data:
+        return jsonify({"error": "doc_id and query must be provided"}), 400
+
+    doc_id = data["doc_id"]
+    query = data["query"]
+    response = generate_response(doc_id, query)
+    return jsonify({"response": response})
+
 
 if __name__ == "__main__":
     app.run(debug=True)

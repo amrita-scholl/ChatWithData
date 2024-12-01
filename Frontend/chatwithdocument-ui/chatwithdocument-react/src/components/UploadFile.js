@@ -1,9 +1,8 @@
 import axios from 'axios';
 import React, { useState } from 'react';
 
-const FileUpload = () => {
+const FileUpload = ({ onFileUpload,onNewFile }) => {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [fileUrl, setFileUrl] = useState('');
   const [error, setError] = useState('');
 
   const handleFileChange = (event) => {
@@ -26,7 +25,19 @@ const FileUpload = () => {
         },
       });
 
-      setFileUrl(response.data.fileUrl);
+      const uploadedFile = selectedFile;
+      const docId = response.data.doc_id;
+
+      // Notify the parent to reset the chat when a new file is uploaded
+      if (onNewFile) {
+        onNewFile(); // Reset the chat messages
+      }
+      
+      // Pass uploadedFile and docId back to parent via onFileUpload callback
+      if (onFileUpload) {
+        onFileUpload({ uploadedFile, docId });
+      }
+
       setError('');
     } catch (err) {
       setError('Error uploading file.');
@@ -35,18 +46,64 @@ const FileUpload = () => {
   };
 
   return (
-    <div>
-      <h1>Upload File</h1>
-      <input type="file" onChange={handleFileChange} />
-      <button onClick={handleUpload}>Upload</button>
-
-      {fileUrl && (
-        <div>
-          <p>File uploaded successfully! Access it <a href={fileUrl} target="_blank" rel="noopener noreferrer">here</a>.</p>
-        </div>
+    <div
+      style={{
+        backgroundColor: '#3A3F47', // Dark gray background for the file upload section
+        padding: '20px',
+        borderRadius: '8px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        color: '#E4E8ED', // Light gray text color
+        fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
+      }}
+    >
+      <h1
+        style={{
+          color: '#00BFAE', // Soft cyan color for the heading
+          fontSize: '20px',
+          marginBottom: '10px',
+        }}
+      >
+        Upload Document
+      </h1>
+      <input
+        type="file"
+        onChange={handleFileChange}
+        style={{
+          backgroundColor: '#4E555D', // Darker input field background
+          color: '#E4E8ED', // Light text color for input
+          padding: '10px',
+          borderRadius: '8px',
+          border: '1px solid #555',
+          width: '100%',
+          marginBottom: '10px',
+        }}
+      />
+      <button
+        onClick={handleUpload}
+        style={{
+          backgroundColor: '#00BFAE', // Soft cyan button color
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: '16px',
+          width: '100%',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        }}
+      >
+        Upload
+      </button>
+      {error && (
+        <p
+          style={{
+            color: '#FF6F61', // Error message color (soft red)
+            marginTop: '10px',
+          }}
+        >
+          {error}
+        </p>
       )}
-
-      {error && <p style={{ color: 'red' }}>{error}</p>}
     </div>
   );
 };
