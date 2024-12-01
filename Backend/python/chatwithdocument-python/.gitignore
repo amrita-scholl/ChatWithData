@@ -1,7 +1,7 @@
 .env
-downloaded_file.pdf
-file.pdf
-vertex-api-sa-keys.json
-app1.py
-app2.py
-app3.py
+./downloaded_file.pdf
+./file.pdf
+./vertex-api-sa-keys.json
+./app1.py
+./app2.py
+./app3.py
